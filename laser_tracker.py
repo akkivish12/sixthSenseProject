@@ -4,9 +4,9 @@ import argparse
 import cv2
 import numpy
 
-from pynput.mouse import Button, Controller
+from getperspective import four_point_transform
 
-mouse = Controller()
+from pynput.mouse import Button, Controller
 
 class LaserTracker(object):    
 
@@ -53,15 +53,32 @@ class LaserTracker(object):
         self.previous_position = None
         self.trail = numpy.zeros((self.cam_height, self.cam_width, 3),
                                  numpy.uint8)
+        self.mouse = Controller()
+        self.corners=[False,False,False,False] #TL, TR, BR, BL
+        self.refPts=[]
 
     def simulateMouseClick(self, pos):
-        global mouse
         #Cursor position is integer (current pixel)
         intPos = (int(pos[0]), int(pos[1]))
-        mouse.move(int(pos[0]), int(pos[1]))
-        mouse.position = intPos
+        self.mouse.move(int(pos[0]), int(pos[1]))
+        self.mouse.position = intPos
         # Click the left button
         #mouse.click(Button.left, 1)
+
+    def on_mouse(self, event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            if not self.corners[0]:
+                self.corners[0]=True
+                self.refPts=[(x, y)]
+            elif not self.corners[1]:
+                self.corners[1]=True
+                self.refPts.append((x, y))
+            elif not self.corners[2]:
+                self.corners[2]=True
+                self.refPts.append((x, y))
+            elif not self.corners[3]:
+                self.corners[3]=True
+                self.refPts.append((x, y))
 
     def create_and_position_window(self, name, xpos, ypos):
         """Creates a named widow placing it on the screen at (xpos, ypos)."""
@@ -243,18 +260,33 @@ class LaserTracker(object):
             self.create_and_position_window('Saturation', 30, 30)
             self.create_and_position_window('Value', 40, 40)
 
+    def isCalirate(self, frame):
+        cv2.setMouseCallback('RGB_VideoFrame', self.on_mouse)
+        
+        for i in range(4):
+            if self.corners[i]:
+                cv2.circle(frame, self.refPts[i], 5, (0,255,0), 1)
+
+        if self.corners[0] and self.corners[1] and self.corners[2] and self.corners[3]:
+            warped = four_point_transform(frame, numpy.array(self.refPts, dtype = "float32"))
+            cv2.imshow('warped', warped)
+
     def run(self):
         # Set up window positions
         self.setup_windows()
         # Set up the camera capture
         self.setup_camera_capture()
 
-        while True:
-            # 1. capture the current image
+        # 1. capture the current image
+        success, frame = self.capture.read()
+        if not success:  # no image captured... end the processing
+            sys.stderr.write("Could not read camera frame. Quitting\n")
+            sys.exit(1)
+
+        while(self.capture.isOpened()):
             success, frame = self.capture.read()
-            if not success:  # no image captured... end the processing
-                sys.stderr.write("Could not read camera frame. Quitting\n")
-                sys.exit(1)
+            
+            self.isCalirate(frame)
 
             hsv_image = self.detect(frame)
             self.display(hsv_image, frame)
