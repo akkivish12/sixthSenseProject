@@ -42,10 +42,15 @@ while(cap.isOpened()):
     
     if corners[0] and corners[1] and corners[2] and corners[3]:
     	warped = four_point_transform(frame, np.array(refPts, dtype = "float32"))
-    	cv2.imshow("warped", warped)
+    	cv2.imshow('warped', warped)
 
     if cv2.waitKey(20) & 0xFF == ord('q'):
         break
+
+    if cv2.waitKey(20) & 0xFF == ord('r'):
+    	cv2.destroyWindow('warped')
+    	corners=[False,False,False,False] #TL, TR, BR, BL
+    	refPts=[]
 
 # When everything done, release the capture
 cap.release()
