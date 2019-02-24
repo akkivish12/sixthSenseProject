@@ -3,10 +3,13 @@ import sys
 import argparse
 import cv2
 import numpy
+import tkinter
 
 from getperspective import four_point_transform
 
 from pynput.mouse import Button, Controller
+
+screenRoot = tkinter.Tk()
 
 class LaserTracker(object):    
 
@@ -56,12 +59,22 @@ class LaserTracker(object):
         self.mouse = Controller()
         self.corners=[False,False,False,False] #TL, TR, BR, BL
         self.refPts=[]
+        
+        global screenRoot
+        self.wRatio = self.cam_width/screenRoot.winfo_screenwidth()
+        self.hRatio = self.cam_height/screenRoot.winfo_screenheight()
+        print('Cam resolution : {} x {}'.format(self.cam_width, self.cam_height))
+        print('Screen resolution : {} x {}'.format(screenRoot.winfo_screenwidth(), screenRoot.winfo_screenheight()))
+        print('calculated ratio {} x {}'.format(self.wRatio, self.hRatio))
+
 
     def simulateMouseClick(self, pos):
         #Cursor position is integer (current pixel)
-        intPos = (int(pos[0]), int(pos[1]))
-        self.mouse.move(int(pos[0]), int(pos[1]))
+        print('cam mouse at position : {}, {}'.format(pos[0], pos[1]))
+        intPos = (int(self.wRatio * pos[0]), int(self.hRatio * pos[1]))
         self.mouse.position = intPos
+        print('calculated mouse at position : {}, {}'.format(intPos[0], intPos[1]))
+        self.mouse.move(int(self.wRatio * pos[0]), int(self.hRatio * pos[1]))
         # Click the left button
         #mouse.click(Button.left, 1)
 
@@ -192,12 +205,7 @@ class LaserTracker(object):
                            (0, 255, 255), 2)
                 cv2.circle(frame, center, 5, (0, 0, 255), -1)
                 self.simulateMouseClick((int(x),int(y)))
-                # then update the ponter trail
-                #if self.previous_position:
-                #    cv2.line(self.trail, self.previous_position, center,
-                #             (255, 255, 255), 2)
 
-        cv2.add(self.trail, frame, frame)
         self.previous_position = center
 
     def detect(self, frame):
@@ -260,7 +268,7 @@ class LaserTracker(object):
             self.create_and_position_window('Saturation', 30, 30)
             self.create_and_position_window('Value', 40, 40)
 
-    def isCalirate(self, frame):
+    def isCalibrate(self, frame):
         cv2.setMouseCallback('RGB_VideoFrame', self.on_mouse)
         
         for i in range(4):
@@ -268,8 +276,12 @@ class LaserTracker(object):
                 cv2.circle(frame, self.refPts[i], 5, (0,255,0), 1)
 
         if self.corners[0] and self.corners[1] and self.corners[2] and self.corners[3]:
-            warped = four_point_transform(frame, numpy.array(self.refPts, dtype = "float32"))
-            cv2.imshow('warped', warped)
+            warped = four_point_transform(frame, numpy.array(self.refPts, dtype = "float32"), (self.cam_width, self.cam_height))
+            #cv2.imshow('warped', warped)
+            return warped
+
+        return frame
+
 
     def run(self):
         # Set up window positions
@@ -286,7 +298,7 @@ class LaserTracker(object):
         while(self.capture.isOpened()):
             success, frame = self.capture.read()
             
-            self.isCalirate(frame)
+            frame = self.isCalibrate(frame)
 
             hsv_image = self.detect(frame)
             self.display(hsv_image, frame)

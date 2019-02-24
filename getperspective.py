@@ -25,13 +25,13 @@ def order_points(pts):
 	# return the ordered coordinates
 	return rect
 
-def four_point_transform(image, pts):
+def four_point_transform(image, pts, resolution):
 	# obtain a consistent order of the points and unpack them
 	# individually
 	rect = order_points(pts)
 	(tl, tr, br, bl) = rect
 
-	# compute the width of the new image, which will be the
+	'''# compute the width of the new image, which will be the
 	# maximum distance between bottom-right and bottom-left
 	# x-coordiates or the top-right and top-left x-coordinates
 	widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
@@ -44,7 +44,8 @@ def four_point_transform(image, pts):
 	heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
 	heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
 	maxHeight = max(int(heightA), int(heightB))
-
+	'''
+	(maxWidth, maxHeight) = resolution
 	# now that we have the dimensions of the new image, construct
 	# the set of destination points to obtain a "birds eye view",
 	# (i.e. top-down view) of the image, again specifying points
