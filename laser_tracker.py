@@ -61,8 +61,8 @@ class LaserTracker(object):
         self.refPts=[]
         
         global screenRoot
-        self.wRatio = self.cam_width/screenRoot.winfo_screenwidth()
-        self.hRatio = self.cam_height/screenRoot.winfo_screenheight()
+        self.wRatio = 1/(self.cam_width/screenRoot.winfo_screenwidth())
+        self.hRatio = 1/(self.cam_height/screenRoot.winfo_screenheight())
         print('Cam resolution : {} x {}'.format(self.cam_width, self.cam_height))
         print('Screen resolution : {} x {}'.format(screenRoot.winfo_screenwidth(), screenRoot.winfo_screenheight()))
         print('calculated ratio {} x {}'.format(self.wRatio, self.hRatio))
@@ -72,9 +72,9 @@ class LaserTracker(object):
         #Cursor position is integer (current pixel)
         print('cam mouse at position : {}, {}'.format(pos[0], pos[1]))
         intPos = (int(self.wRatio * pos[0]), int(self.hRatio * pos[1]))
-        self.mouse.position = intPos
         print('calculated mouse at position : {}, {}'.format(intPos[0], intPos[1]))
-        self.mouse.move(int(self.wRatio * pos[0]), int(self.hRatio * pos[1]))
+        
+        self.mouse.position = intPos
         # Click the left button
         #mouse.click(Button.left, 1)
 
