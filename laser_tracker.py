@@ -87,8 +87,10 @@ class LaserTracker(object):
         # Click the left button 
         x = [p[0] for p in self.previous_pos]
         y = [p[1] for p in self.previous_pos]
-        centroid = (sum(x) / len(self.previous_pos), sum(y) / len(self.previous_pos))
-        if self.emulate.seen and self.emulate.count > 30 and (abs(pos[0]-centroid[0])<5 or abs(pos[1]-centroid[1])<5 ):
+        centroid = (numpy.median(x), numpy.median(y))
+        #print('{} - {}'.format(centroid, self.previous_pos))
+        flag = (abs(pos[0]-centroid[0])<5 or abs(pos[1]-centroid[1])<5 )
+        if self.emulate.seen and self.emulate.count > 30 and flag:
             self.mouse.press(Button.left)
             self.emulate.click_on = True
 
