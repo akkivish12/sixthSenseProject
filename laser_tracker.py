@@ -3,10 +3,26 @@ import sys
 import argparse
 import cv2
 import numpy
+import tkinter
+
+from getperspective import four_point_transform
 
 from pynput.mouse import Button, Controller
 
-mouse = Controller()
+screenRoot = tkinter.Tk()
+
+class Emulate(object):
+    def __init__(self, count=0, seen=False, cursor_range=10, click_on=False):
+        self.count = count
+        self.seen = seen
+        self.cursor_range = cursor_range
+        self.click_on = click_on
+
+    def reset(self):
+        self.count = 0
+        self.seen = False
+        self.cursor_range = 10
+        self.click_on = False
 
 class LaserTracker(object):    
 
@@ -50,18 +66,48 @@ class LaserTracker(object):
             'laser': None,
         }
 
-        self.previous_position = None
-        self.trail = numpy.zeros((self.cam_height, self.cam_width, 3),
-                                 numpy.uint8)
+        self.mouse = Controller()
+        self.corners=[False,False,False,False] #TL, TR, BR, BL
+        self.refPts=[]
+        
+        global screenRoot
+        self.wRatio = 1/(self.cam_width/screenRoot.winfo_screenwidth())
+        self.hRatio = 1/(self.cam_height/screenRoot.winfo_screenheight())
+        print('Cam resolution : {} x {}'.format(self.cam_width, self.cam_height))
+        print('Screen resolution : {} x {}'.format(screenRoot.winfo_screenwidth(), screenRoot.winfo_screenheight()))
+        print('calculated ratio {} x {}'.format(self.wRatio, self.hRatio))
+        self.emulate = Emulate()
+        self.previous_pos = []
+
 
     def simulateMouseClick(self, pos):
-        global mouse
         #Cursor position is integer (current pixel)
-        intPos = (int(pos[0]), int(pos[1]))
-        mouse.move(int(pos[0]), int(pos[1]))
-        mouse.position = intPos
-        # Click the left button
-        #mouse.click(Button.left, 1)
+        intPos = (int(self.wRatio * pos[0]), int(self.hRatio * pos[1]))
+        self.mouse.position = intPos
+        # Click the left button 
+        x = [p[0] for p in self.previous_pos]
+        y = [p[1] for p in self.previous_pos]
+        centroid = (numpy.median(x), numpy.median(y))
+        #print('{} - {}'.format(centroid, self.previous_pos))
+        flag = (abs(pos[0]-centroid[0])<5 or abs(pos[1]-centroid[1])<5 )
+        if self.emulate.seen and self.emulate.count > 30 and flag:
+            self.mouse.press(Button.left)
+            self.emulate.click_on = True
+
+    def on_mouse(self, event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            if not self.corners[0]:
+                self.corners[0]=True
+                self.refPts=[(x, y)]
+            elif not self.corners[1]:
+                self.corners[1]=True
+                self.refPts.append((x, y))
+            elif not self.corners[2]:
+                self.corners[2]=True
+                self.refPts.append((x, y))
+            elif not self.corners[3]:
+                self.corners[3]=True
+                self.refPts.append((x, y))
 
     def create_and_position_window(self, name, xpos, ypos):
         """Creates a named widow placing it on the screen at (xpos, ypos)."""
@@ -107,8 +153,9 @@ class LaserTracker(object):
         key = cv2.waitKey(delay)
         c = chr(key & 255)
         if c in ['c', 'C']:
-            self.trail = numpy.zeros((self.cam_height, self.cam_width, 3),
-                                     numpy.uint8)
+            self.corners=[False,False,False,False] #TL, TR, BR, BL
+            self.refPts=[]
+        
         if c in ['q', 'Q', chr(27)]:
             sys.exit(0)
 
@@ -134,7 +181,7 @@ class LaserTracker(object):
             tmp,  # src
             minimum,  # threshold value
             255,  # maxvalue
-            cv2.THRESH_BINARY  # type
+            cv2.THRESH_BINARY # type
         )
 
         if channel == 'hue':
@@ -150,7 +197,7 @@ class LaserTracker(object):
         http://www.pyimagesearch.com/2015/09/14/ball-tracking-with-opencv/
         """
         center = None
-
+        # cv2.RETR_EXTERNAL
         countours = cv2.findContours(mask, cv2.RETR_EXTERNAL,
                                      cv2.CHAIN_APPROX_SIMPLE)[-2]
 
@@ -169,19 +216,21 @@ class LaserTracker(object):
                 center = int(x), int(y)
 
             # only proceed if the radius meets a minimum size
-            if radius > 10:
+            if radius > 5 and radius < 20:
                 # draw the circle and centroid on the frame,
                 cv2.circle(frame, (int(x), int(y)), int(radius),
                            (0, 255, 255), 2)
                 cv2.circle(frame, center, 5, (0, 0, 255), -1)
-                self.simulateMouseClick((int(x),int(y)))
-                # then update the ponter trail
-                #if self.previous_position:
-                #    cv2.line(self.trail, self.previous_position, center,
-                #             (255, 255, 255), 2)
+                self.emulate.seen = True
+                self.emulate.count = self.emulate.count + 1
+                self.previous_pos.append(center)
+                self.simulateMouseClick(center)
+        else:
+            if self.emulate.click_on:
+                self.mouse.release(Button.left)
+            self.emulate.reset()
+            self.previous_pos = []
 
-        cv2.add(self.trail, frame, frame)
-        self.previous_position = center
 
     def detect(self, frame):
         hsv_img = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -202,10 +251,12 @@ class LaserTracker(object):
             self.channels['hue'],
             self.channels['value']
         )
+        '''
         self.channels['laser'] = cv2.bitwise_and(
             self.channels['saturation'],
             self.channels['laser']
         )
+        '''
 
         # Merge the HSV components back together.
         hsv_image = cv2.merge([
@@ -226,9 +277,9 @@ class LaserTracker(object):
         cv2.imshow('LaserPointer', self.channels['laser'])
         if self.display_thresholds:
             cv2.imshow('Thresholded_HSV_Image', img)
-            cv2.imshow('Hue', self.channels['hue'])
-            cv2.imshow('Saturation', self.channels['saturation'])
-            cv2.imshow('Value', self.channels['value'])
+            #cv2.imshow('Hue', self.channels['hue'])
+            #cv2.imshow('Saturation', self.channels['saturation'])
+            #cv2.imshow('Value', self.channels['value'])
 
     def setup_windows(self):
         sys.stdout.write("Using OpenCV version: {0}\n".format(cv2.__version__))
@@ -238,10 +289,24 @@ class LaserTracker(object):
         self.create_and_position_window('RGB_VideoFrame',
                                         10 + self.cam_width, 0)
         if self.display_thresholds:
-            self.create_and_position_window('Thresholded_HSV_Image', 10, 10)
-            self.create_and_position_window('Hue', 20, 20)
-            self.create_and_position_window('Saturation', 30, 30)
-            self.create_and_position_window('Value', 40, 40)
+            self.create_and_position_window('Thresholded_HSV_Image', 10, 10 + self.cam_height)
+            #self.create_and_position_window('Hue', 20, 20)
+            #self.create_and_position_window('Saturation', 30, 30)
+            #self.create_and_position_window('Value', 40, 40)
+
+    def isCalibrate(self, frame):
+        cv2.setMouseCallback('RGB_VideoFrame', self.on_mouse)
+        
+        for i in range(4):
+            if self.corners[i]:
+                cv2.circle(frame, self.refPts[i], 5, (0,255,0), 1)
+
+        if self.corners[0] and self.corners[1] and self.corners[2] and self.corners[3]:
+            warped = four_point_transform(frame, numpy.array(self.refPts, dtype = "float32"), (self.cam_width, self.cam_height))
+            return warped
+
+        return frame
+
 
     def run(self):
         # Set up window positions
@@ -249,12 +314,16 @@ class LaserTracker(object):
         # Set up the camera capture
         self.setup_camera_capture()
 
-        while True:
-            # 1. capture the current image
+        # 1. capture the current image
+        success, frame = self.capture.read()
+        if not success:  # no image captured... end the processing
+            sys.stderr.write("Could not read camera frame. Quitting\n")
+            sys.exit(1)
+
+        while(self.capture.isOpened()):
             success, frame = self.capture.read()
-            if not success:  # no image captured... end the processing
-                sys.stderr.write("Could not read camera frame. Quitting\n")
-                sys.exit(1)
+            
+            frame = self.isCalibrate(frame)
 
             hsv_image = self.detect(frame)
             self.display(hsv_image, frame)
