@@ -78,10 +78,14 @@ class LaserTracker(object):
         print('calculated ratio {} x {}'.format(self.wRatio, self.hRatio))
         self.emulate = Emulate()
         self.previous_pos = []
+        self.start_track = False
 
 
     def simulateMouseClick(self, pos):
         #Cursor position is integer (current pixel)
+        if self.start_track == False:
+                return
+
         intPos = (int(self.wRatio * pos[0]), int(self.hRatio * pos[1]))
         self.mouse.position = intPos
         # Click the left button 
@@ -89,7 +93,7 @@ class LaserTracker(object):
         y = [p[1] for p in self.previous_pos]
         centroid = (numpy.median(x), numpy.median(y))
         #print('{} - {}'.format(centroid, self.previous_pos))
-        flag = (abs(pos[0]-centroid[0])<5 or abs(pos[1]-centroid[1])<5 )
+        flag = (abs(pos[0]-centroid[0])<self.emulate.cursor_range or abs(pos[1]-centroid[1])<self.emulate.cursor_range )
         if self.emulate.seen and self.emulate.count > 30 and flag:
             self.mouse.press(Button.left)
             self.emulate.click_on = True
@@ -152,10 +156,19 @@ class LaserTracker(object):
         """Quit the program if the user presses "Esc" or "q"."""
         key = cv2.waitKey(delay)
         c = chr(key & 255)
-        if c in ['c', 'C']:
+        if c in ['r', 'R']:
+            print('Calibration reset')
             self.corners=[False,False,False,False] #TL, TR, BR, BL
             self.refPts=[]
         
+        if c in ['s', 'S']:
+            print('Start tracking laser')
+            self.start_track = True
+
+        if c in ['d', 'D']:
+            print('Stop tracking laser')
+            self.start_track = False
+
         if c in ['q', 'Q', chr(27)]:
             sys.exit(0)
 
@@ -197,7 +210,7 @@ class LaserTracker(object):
         http://www.pyimagesearch.com/2015/09/14/ball-tracking-with-opencv/
         """
         center = None
-        # cv2.RETR_EXTERNAL
+        # cv2.RETR_TREE
         countours = cv2.findContours(mask, cv2.RETR_EXTERNAL,
                                      cv2.CHAIN_APPROX_SIMPLE)[-2]
 
@@ -216,7 +229,7 @@ class LaserTracker(object):
                 center = int(x), int(y)
 
             # only proceed if the radius meets a minimum size
-            if radius > 5 and radius < 20:
+            if radius > 10 and radius < 30:
                 # draw the circle and centroid on the frame,
                 cv2.circle(frame, (int(x), int(y)), int(radius),
                            (0, 255, 255), 2)
